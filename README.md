@@ -21,7 +21,7 @@ Ainsi, nous pouvons voir qu'une table **tasks** va être créée si elle n'exist
 
 ### Mise en place du container de base de données
 
-Pour mettre en place la base de données, executez les commandes suivantes en tant qu'utilisateur root.
+Pour mettre en place notre base de données, exécutez les commandes suivantes en tant qu'utilisateur root.
 ```
 docker compose up
 ```
@@ -60,7 +60,7 @@ L'arborescence d'un projet Rust se décompose en plusieurs modules de fichiers e
 
 Il sera possible de définir des modules de fichiers dans des sous-arborescences grâce à des fichiers **mod.rs** qui seront eux-mêmes listés dans **lib.rs**.
 
-Dans notre cas, nous garderons les choses légères et importantes dans des fichiers, et nous utiliserons des fichiers **mod.rs** et les sous-arborescences pour les dépendances qui peuvent tendre à s'allourdir.
+Dans notre cas, nous garderons les choses légères et importantes dans des fichiers, et nous utiliserons des fichiers **mod.rs** et les sous-arborescences pour les dépendances qui peuvent tendre à s'alourdir.
 
 ### main.rs
 
@@ -71,16 +71,16 @@ Nous allons tenter de garder ce fichier le plus lisible possible, c'est pourquoi
 `#[tokio::main]` permet d'indiquer à Rust que nous allons utiliser le runtime Tokio, qui est un runtime asynchrone.
 
 ### server.rs
-Le fichier server.rs contient la fonction `run()` qui permet d'instancier le server et lancer l'application.
-Mais avant cela, server.rs va permettre de définir les routes de notre application, les states ainsi que la connections en base de données.
+Le fichier server.rs contient la fonction `run()` qui permet d'instancier le serveur et lancer l'application.
+Mais avant cela, server.rs va permettre de définir les routes de notre application, les states ainsi que la connexion en base de données.
  
 ### router.rs
 Le fichier router.rs contient la fonction `create_routes()` qui permet de définir les routes de notre application.
 C'est dans ce même routeur que nous allons définir les extensions, les middlewares, les states et les controllers.
 
 **Petite note :**
-Les routes peuvent être organisés à l'aide de **nest** pour générer des plus petit routeurs qui regroupent plusieurs routes pour un même prefix "/tasks", sur lequel esra appliqué différentes méthodes HTTP associées à différents handlers.
-Les routes peuvent aussi être organisées de manière plus fines pour une gestion des autorisations par groupe d'utilisateurs.
+Les routes peuvent être organisées à l'aide de **nest** pour générer des plus petits routeurs qui regroupent plusieurs routes pour un même prefix "/tasks", sur lequel esra appliqué différentes méthodes HTTP associées à différents handlers.
+Les routes peuvent aussi être organisées de manière plus fine pour une gestion des autorisations par groupe d'utilisateurs.
 
 ### répertoire routes
 Le répertoire routes contient les fichiers qui définissent les handlers de nos routes.
@@ -89,7 +89,7 @@ Le répertoire routes contient les fichiers qui définissent les handlers de nos
 Le répertoire models contient les fichiers qui définissent les structures de données.
 
 ### répertoire database
-Le répertoire database contient les fichiers qui définissent les entités de la base de données généré par sea-orm.
+Le répertoire database contient les fichiers qui définissent les entités de la base de données générées par sea-orm.
 
 ## 1.4 - Utilitaire
 
@@ -177,7 +177,7 @@ pub async fn hello_world() -> Result<String, (StatusCode, String)> {
 
 ## 1.7 - Création d'endpoint : GET /teapots
 
-Pour cette endpoint, ce ne sera pas beaucoup plus compliqué que l'endpoint précédent. Cependant vous devrez retourner une structure de données.
+Pour cette endpoint, ce ne sera pas beaucoup plus compliqué que l'endpoint précédent. Cependant, vous devrez retourner une structure de données.
 
 **Correction :**
 
@@ -217,7 +217,7 @@ if let Err(errors) = request.validate() {
 
 ## 1.9 - Application state
 
-Pour les prochaines questions, nous allons utiliser un state pour stocker notre pool de connection à la base de données et l'utiliser dans les futurs endpoints, c'est pourquoi il est important de faire un petit point.
+Pour les prochaines questions, nous allons utiliser un state pour stocker notre pool de connexion à la base de données et l'utiliser dans les futurs endpoints, c'est pourquoi il est important de faire un petit point.
 
 https://docs.rs/axum/latest/axum/extract/struct.State.html
 
