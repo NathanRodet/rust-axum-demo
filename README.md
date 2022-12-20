@@ -91,31 +91,386 @@ Le répertoire models contient les fichiers qui définissent les structures de d
 ### répertoire database
 Le répertoire database contient les fichiers qui définissent les entités de la base de données généré par sea-orm.
 
-## 1.4 - Création d'une stucture de données
+## 1.4 - Utilitaire
 
-## 1.5 - Création d'endpoint : GET / 
+### Snippets du framework Axum
 
-### Handler
-### Result<>
+Axum met à disposition des snippets pour faciliter l'apprentissage du framework.
+https://github.com/tokio-rs/axum/tree/main/examples
 
-## 1.6 - Création d'endpoint : GET /teapots
+### Debug
 
-### Status Code
+Vous pouvez utiliser la macro `debug!()` pour afficher des informations dans la console.
+Si votre erreur est sur un handler, vous pouvez utiliser https://docs.rs/axum-macros/0.3.0/axum_macros/ pour afficher plus d'informations.
 
-## 1.7 - Création d'endpoint : POST /tasks
+**A placer au dessus d'un handler :**
+```rust
+#[debug_handler]
+```
 
-### States
+## 1.5 - Création d'une stucture de données
 
-### Insertion en base de données
+### Avec champs nommés et options
+
+```rust
+struct Task {
+    id: i32,
+    priority: String,
+    title: String,
+    description: Option<String>,
+}
+
+let task2 = Task {
+    priority: String::from("B"),
+    ..task1
+}
+```
+
+
+### Sans champs nommés
+
+```rust
+struct Color(i32, i32, i32);
+struct Point(i32, i32, i32);
+
+fn main() {
+    let black = Color(0, 0, 0);
+    let origin = Point(0, 0, 0);
+}
+```
+
+### Serde, Serialize, Deserialize
+
+Serde est un framework de sérialisation et de désérialisation de données. Il permet de convertir des données structurées en un format de données sérialisé (JSON, XML, YAML, etc.) et vice versa.
+
+Données non structurées (JSON, XML, YAML, etc.) -> Serialize 
+Données structurées (struct, enum, tuple, etc.) -> Deserialize
+
+**Il existe aussi un trait de débugage :**
+
+```rust
+#[derive(Debug, Deserialize, Serialize)]
+pub struct TaskResponse {
+    pub id: i32,
+    pub priority: String,
+    pub title: String,
+    pub description: Option<String>,
+}
+```
+
+## 1.6 - Création d'endpoint : GET / 
+
+Nous allons créer notre premier endpoint.
+L'endpoint doit retourner un `Result` qui doit retourner un `Ok` ou un `Err` dans lesquels seront encapsulés vos résultats.
+
+Dans notre cas, le type retourné est une simple chaîne de caractères, nous allons donc retourner un `Ok` avec la chaîne de caractères.
+
+https://doc.rust-lang.org/std/result/ 
+
+**Correction :**
+
+```rust
+pub async fn hello_world() -> Result<String, (StatusCode, String)> {
+    Ok(String::from("Hello World"))
+}
+```
+
+## 1.7 - Création d'endpoint : GET /teapots
+
+Pour cette endpoint, ce ne sera pas beaucoup plus compliqué que l'endpoint précédent. Cependant vous devrez retourner une structure de données.
+
+**Correction :**
+
+```rust
+pub async fn teapot() -> Result<TeapotResponse, (StatusCode, String)> {
+    Ok(TeapotResponse("I'm a teapot".to_string()))
+}
+```
 
 ## 1.8 - Validation de la structure de données de données
 
-## 1.9 - Gestion des erreurs et "null case"
+Pour valider la structure de données, nous allons utiliser le framework **validator**. Il suffit comme pour Serde d'ajouter l'annotation `#[derive(Validate)]` sur la structure de données.
 
-## 2.0 - Création d'endpoint : GET /tasks
+https://docs.rs/validator/latest/validator/ 
 
-## 2.1 - Création d'un filtre sur l'endpoint : GET /tasks
+**Correction :**
 
-## 2.2 - Création d'endpoint : GET /tasks/{id}
+```rust
+#[derive(Deserialize, Serialize, Validate, Debug)]
+pub struct TaskRequest {
+    #[validate(length(min = 1, max = 3, message = "String must have between 1 and 3 characters"))]
+    pub priority: String,
+    #[validate(length(min = 3, max = 32, message = "String must have between 3 and 32 characters"))]
+    pub title: String,
+    #[validate(length(min = 3, max = 120, message = "Optional String must have between 3 and 120 characters"))]
+    pub description: Option<String>,
+}
+```
 
-## 2.3 - Création d'endpoint : PUT /tasks/{id}
+Pour l'implémenter :
+
+```rust
+if let Err(errors) = request.validate() {
+    return Err((StatusCode::BAD_REQUEST, format!("{}", errors)));
+}
+```
+
+## 1.9 - Application state
+
+Pour les prochaines questions, nous allons utiliser un state pour stocker notre pool de connection à la base de données et l'utiliser dans les futurs endpoints, c'est pourquoi il est important de faire un petit point.
+
+https://docs.rs/axum/latest/axum/extract/struct.State.html
+
+### State
+
+Sa structure est déclarée dans le fichier app_state.rs du répertoire models et sera réutilisée à chaque utilisation du state.
+
+```rust
+use axum_macros::FromRef;
+use sea_orm::DatabaseConnection;
+
+#[derive(Clone, FromRef)]
+pub struct AppState {
+    pub database_conn: DatabaseConnection,
+}
+```
+
+Il est déclaré dans le fichier server.rs puis passer en argument à la fonction `create_routes` qui retourne un `Router`.
+
+```rust
+ let database_conn = Database::connect(database_uri).await.unwrap();
+ let app_state = AppState { database_conn };
+ let app = create_routes(app_state);
+ ```
+
+Ainsi, nous pouvons l'implémenter dans notre arborescence de routeur pour être utilisé dans les endpoints.
+
+```rust
+Router::new().nest("", index_nest).with_state(app_state)
+```
+
+Dans les endpoints, nous pouvons récupérer le state avec l'annotation `#[extract]` et le type `State<AppState>`.
+
+```rust
+pub async fn get_db_conn(
+    State(database_conn): State<DatabaseConnection>,
+) -> Result<(), (StatusCode, String)> {
+
+}
+```
+
+## 2.0 - Création d'endpoint : POST /tasks
+
+Nous allons maintenant créer le premier endpoint d'un CRUD sur la ressource **tasks**. Nos réponses seront de type JSON, nous allons donc utiliser le framework Serde pour sérialiser et désérialiser nos données et nous allons donc créer un nouveau fichier dans le répertoire models : **task.rs**.
+
+Pour la première fois nous allons utiliser sea-orm pour intéragir avec notre base de données, l'ORM est très bien documenté :
+https://www.sea-ql.org/SeaORM/docs/index/
+
+Pour la première fois, nous allons aussi utiliser le routeur et devoir le modifier ajouter un nouvel endpoint, encore une fois c'est très bien documenté : https://docs.rs/axum/0.2.3/axum/routing/struct.Router.html
+
+**Correction :**
+
+```rust
+pub async fn create_task(
+    State(database_conn): State<DatabaseConnection>,
+    Json(request): Json<TaskRequest>,
+) -> Result<StatusCode, (StatusCode, String)> {
+
+    if let Err(errors) = request.validate() {
+        return Err((StatusCode::BAD_REQUEST, format!("{}", errors)));
+    }
+
+    let task = tasks::ActiveModel {
+        title: Set(request.title),
+        priority: Set(request.priority),
+        description: Set(request.description),
+        ..Default::default()
+    };
+
+    let _result = task
+        .save(&database_conn)
+        .await
+        .map_err(|errors| (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", errors)));
+
+    Ok(StatusCode::CREATED)
+}
+```
+
+## 2.1 - Création d'endpoint : GET /tasks
+
+Nous allons maintenant créer un endpoint qui va nous permettre de récupérer toutes les tâches de la base de données.
+
+**Correction :**
+
+```rust
+pub async fn get_all_tasks(
+    State(database_conn): State<DatabaseConnection>,
+) -> Result<Json<Vec<TaskResponse>>, (StatusCode, String)> {
+
+    let tasks = tasks::Entity::find()
+        .all(&database_conn)
+        .await
+        .map_err(|errors| (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", errors)))?
+        .into_iter()
+        .map(|db_task| TaskResponse {
+            id: db_task.id,
+            title: db_task.title,
+            priority: db_task.priority,
+            description: db_task.description,
+        })
+        .collect();
+
+    Ok(Json(tasks))
+}
+```
+
+## 2.2 - Création d'un filtre sur l'endpoint : GET /tasks
+
+Nous allons maintenant créer un endpoint qui va nous permettre de récupérer toutes les tâches de la base de données en fonction d'un filtre.
+
+Pour cela nous allons utiliser QueryParams : https://docs.rs/axum/latest/axum/extract/struct.Query.html pour récupérer un paramètre optionnel.
+
+**Correction :**
+
+```rust
+pub async fn get_all_tasks(
+    State(database_conn): State<DatabaseConnection>,
+    query_params: Option<Query<GetTaskQueryParams>>,
+) -> Result<Json<Vec<TaskResponse>>, (StatusCode, String)> {
+    let priority_filter = match query_params {
+        Some(query_params) => {
+            if let Err(errors) = query_params.validate() {
+                return Err((StatusCode::BAD_REQUEST, format!("{}", errors)));
+            }
+            Condition::all().add(tasks::Column::Priority.eq(&*query_params.priority))
+        }
+        None => Condition::all(),
+    };
+
+    let tasks = tasks::Entity::find()
+        .filter(priority_filter)
+        .all(&database_conn)
+        .await
+        .map_err(|errors| (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", errors)))?
+        .into_iter()
+        .map(|db_task| TaskResponse {
+            id: db_task.id,
+            title: db_task.title,
+            priority: db_task.priority,
+            description: db_task.description,
+        })
+        .collect();
+        
+    Ok(Json(tasks))
+}
+```
+
+## 2.4 - Création d'endpoint : GET /tasks/{id}
+
+Cette fois nous allons devoir récupérer le path de l'endpoint, pour cela nous allons utiliser l'annotation `#[extract]` et le type `Path<i32>`.
+
+Quelques exemples : https://docs.rs/axum/latest/axum/extract/index.html
+
+**Correction :**
+
+```rust
+pub async fn get_task(
+    Path(id): Path<i32>,
+    State(database_conn): State<DatabaseConnection>,
+) -> Result<Json<TaskResponse>, (StatusCode, String)> {
+    let task = tasks::Entity::find_by_id(id)
+        .one(&database_conn)
+        .await
+        .map_err(|errors| (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", errors)));
+
+    match task.unwrap() {
+        Some(task) => {
+            let task = TaskResponse {
+                id: task.id,
+                title: task.title,
+                priority: task.priority,
+                description: task.description,
+            };
+            Ok(Json(task))
+        }
+        None => Err((StatusCode::NOT_FOUND, "Task not found".to_string())),
+    }
+}
+```
+
+## 2.5 - Création d'endpoint : DELETE /tasks/{id}
+
+Nous allons maintenant créer un endpoint qui va nous permettre de supprimer une tâche de la base de données, nous récupérerons l'id de la tâche depuis le path comme pour l'endpoint précédent.
+
+**Correction :**
+
+```rust
+pub async fn delete_task(
+    Path(id): Path<i32>,
+    State(database_conn): State<DatabaseConnection>,
+) -> Result<(), (StatusCode, String)> {
+    let task: Option<tasks::Model> = tasks::Entity::find_by_id(id)
+        .one(&database_conn)
+        .await
+        .map_err(|errors| (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", errors)))?;
+
+    if let Some(task) = task {
+        let task: tasks::Model = task.into();
+        let res: DeleteResult = task
+            .delete(&database_conn)
+            .await
+            .map_err(|errors| (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", errors)))?;
+        assert_eq!(res.rows_affected, 1);
+        Ok(())
+    } else {
+        Err((StatusCode::NOT_FOUND, "Task not found".to_string()))
+    }
+}
+```
+
+## 2.6 - Création d'endpoint : PUT /tasks/{id}
+
+Nous allons maintenant créer un endpoint qui va nous permettre de mettre à jour une tâche de la base de données, nous récupérerons l'id de la tâche depuis le path comme pour l'endpoint précédent.
+
+**Correction :**
+
+```rust
+pub async fn update_task(
+    Path(id): Path<i32>,
+    State(database_conn): State<DatabaseConnection>,
+    Json(request): Json<TaskRequest>,
+) -> Result<Json<TaskRequest>, (StatusCode, String)> {
+    if let Err(errors) = request.validate() {
+        return Err((StatusCode::BAD_REQUEST, format!("{}", errors)));
+    }
+
+    let task: Option<tasks::Model> = tasks::Entity::find_by_id(id)
+        .one(&database_conn)
+        .await
+        .map_err(|errors| (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", errors)))?;
+
+    match task {
+        Some(task) => {
+            let mut task: tasks::ActiveModel = task.into();
+
+            task.title = Set(request.title);
+            task.priority = Set(request.priority);
+            task.description = Set(request.description);
+
+            let task: tasks::Model = task
+                .update(&database_conn)
+                .await
+                .map_err(|errors| (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", errors)))?;
+
+            Ok(Json({
+                TaskRequest {
+                    title: task.title,
+                    priority: task.priority,
+                    description: task.description,
+                }
+            }))
+        }
+        None => Err((StatusCode::NOT_FOUND, "Task not found".to_string())),
+    }
+}
+```
