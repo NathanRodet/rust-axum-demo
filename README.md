@@ -483,6 +483,9 @@ Maintenant que nous avons un CRUD fonctionnel, il est temps de créer des tests 
 Axum met à disposition un excellent example pour la conception des tests : https://github.com/tokio-rs/axum/blob/main/examples/testing/src/main.rs 
 
 Pour cela, nous allons créer un répertoire tests contenant un fichier mod.rs, app.rs et tasks.rs.
+Nous allons tester deux endpoints : GET / et POST /tasks.
+
+L'endpoint GET / est déjà réalisé et si votre string retournée est correct, vous devriez avoir un test qui passe avec la commande `cargo test`.
 
 **Correction :**
 
