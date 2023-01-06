@@ -1,8 +1,12 @@
 # Présentation du sujet et mise en place
 
 Bienvenue pour cette démonstration du langage Rust et du Framework Axum. Ce projet a pour but de vous faire découvrir Rust et Axum à travers différentes étapes.
+Nous réaliserons ainsi une API REST qui permettra de gérer des tâches.
 
-Pour ce projet, nous utiliserons une base de données Postgresql et nous allons apprendre à la mettre en place avec Docker dès maintenant.
+
+## 1.0 - Début du projet
+
+Pour commencer, nous allons mettre en place une base de données avec Docker dès maintenant.
 Dans un premier temps, vérifiez qu'un fichier **.env** existe à la racine et qu'il contient les informations suivantes :
 
 ```
@@ -17,16 +21,14 @@ POSTGRES_DB=postgres
 Nous allons maintenant voir ce que contient notre base de données. Rendez-vous dans le fichier init.sql", au répertoire **db_scripts**.
 Ainsi, nous pouvons voir qu'une table **tasks** va être créée si elle n'existe pas déjà, et cette table sera utilisée par sea-orm pour générer nos entités.
 
-## 1.0 - Début du projet
-
 ### Mise en place du container de base de données
 
 Pour mettre en place notre base de données, exécutez les commandes suivantes en tant qu'utilisateur root.
-```
+```bash
 docker compose up
 ```
 En cas de problème, vous pouvez arrêter le container et supprimer la base de données à l'aide des commandes suivante :
-```
+```bash
 docker compose down
 rm -rf /data -f
 ```
@@ -35,19 +37,19 @@ rm -rf /data -f
 
 Nous allons utiliser l'ORM "sea-orm" pour générer nos entités de base de données à partir de notre base de données mise en place.
 Installons la dépendance de la command-line de sea-orm.
-```
+```bash
 cargo install sea-orm-cli
 ```
 sea-orm va utiliser notre base Posgresql, assurez-vous que le container est bien lancé.
 Nous allons placer nos entités dans le répertoire "src/database".
-```
+```bash
 sea-orm-cli generate entity -o src/database
 ```
 
 ## 1.2 - Cargo run
 
 Maintenant, nous allons vérifier que le programme s'execute correctement.
-```
+```bash
 cargo run
 ```
 
@@ -473,4 +475,70 @@ pub async fn update_task(
         None => Err((StatusCode::NOT_FOUND, "Task not found".to_string())),
     }
 }
+```
+
+## 2.6 - Création de tests : cargo test
+
+Maintenant que nous avons un CRUD fonctionnel, il est temps de créer des tests pour éviter les régressions.
+Axum met à disposition un excellent example pour la conception des tests : https://github.com/tokio-rs/axum/blob/main/examples/testing/src/main.rs 
+
+Pour cela, nous allons créer un répertoire tests contenant un fichier mod.rs, app.rs et tasks.rs.
+
+**Correction :**
+
+```rust
+// app.rs
+use axum::{routing::get, Router};
+use dotenvy_macro::dotenv;
+use sea_orm::Database;
+
+use crate::{models::app_state::AppState, routes::index::hello_world};
+
+pub async fn app_test() -> Router {
+    let database_uri = dotenv!("DATABASE_URL").to_owned();
+    let database_conn = Database::connect(database_uri).await.unwrap();
+    let app_state = AppState { database_conn };
+
+    let guest_nest = Router::new().route("/", get(hello_world));
+    let tasks_nest = Router::new().route("/", post(create_task));
+
+    Router::new().nest("", index_nest).nest("/tasks", tasks_nest).with_state(app_state)
+}
+
+```
+
+```rust
+// tasks.rs
+#[cfg(test)]
+mod tests {
+    use crate::tests::app::app_test;
+    use axum::body::Body;
+    use axum::http;
+    use axum::http::Request;
+    use axum::http::StatusCode;
+    use serde_json::json;
+    use tower::ServiceExt; // for `oneshot` and `ready`
+
+    #[tokio::test]
+    async fn create_task_test() {
+        let app = app_test().await;
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(http::Method::POST)
+                    .uri("/task")
+                    .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({"title": "test title", "description": "test description", "priority": "qos"})).unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+}
+
 ```
